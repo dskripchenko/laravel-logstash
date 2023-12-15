@@ -16,9 +16,10 @@
         }
     ],
     "require": {
+        "php": "^8.2",
         "ext-json": "*",
-        "monolog/monolog": "^2.0",
-        "laravel/framework": "6.*|7.*|8.*|9.*",
+        "monolog/monolog": "^3.5",
+        "laravel/framework": "10.*",
         "guzzlehttp/guzzle": "^7.5",
         "dskripchenko/php-array-helper": "^1.1"
     },

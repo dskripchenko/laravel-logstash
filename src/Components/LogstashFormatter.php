@@ -2,64 +2,104 @@
 
 namespace Dskripchenko\LaravelLogstash\Components;
 
-use Monolog\Formatter\LogstashFormatter as BaseLogstashFormatter;
+use Monolog\Formatter\NormalizerFormatter as BaseLogstashFormatter;
+use Monolog\LogRecord;
 
 class LogstashFormatter extends BaseLogstashFormatter
 {
+
     /**
-     * @param array $record
-     * @return string
+     * @var string
      */
-    public function format(array $record): string
+    protected string $systemName;
+
+    /**
+     * @var string
+     */
+    protected string $applicationName;
+
+    /**
+     * @var string
+     */
+    protected string $extraKey;
+
+    /**
+     * @var string
+     */
+    protected string $contextKey;
+
+    /**
+     * @param string $applicationName
+     * @param string|null $systemName
+     * @param string $extraKey
+     * @param string $contextKey
+     */
+    public function __construct(
+        string $applicationName,
+        ?string $systemName = null,
+        string $extraKey = 'extra',
+        string $contextKey = 'context'
+    ) {
+        parent::__construct('Y-m-d\TH:i:s.uP');
+
+        $this->systemName = $systemName ?? (string) gethostname();
+        $this->applicationName = $applicationName;
+        $this->extraKey = $extraKey;
+        $this->contextKey = $contextKey;
+    }
+
+    /**
+     * @param LogRecord $record
+     *
+     * @return array
+     */
+    public function format(LogRecord $record): array
     {
-        $record = (array) $this->normalize($record);
-        $message = $this->prepare($record);
-        return $this->toJson($message) . "\n";
+        return $this->prepare($this->normalizeRecord($record));
     }
 
 
     /**
-     * @param array $record
+     * @param array $data
+     *
      * @return array
      */
-    protected function prepare(array $record): array
+    protected function prepare(array $data): array
     {
         $message = [
             '@version' => 1,
 
-            '@timestamp' => $record['datetime'] ?? gmdate('c'),
+            '@timestamp' => $data['datetime'] ?? gmdate('c'),
             'DateTime' => date('Y-m-d H:i:s'),
 
-            'Type' => $record['level_name']
-                ?? $record['level']
+            'Type' => $data['level_name']
+                ?? $data['level']
                 ?? $this->applicationName
-                    ?: $record['channel']
+                    ?: $data['channel']
                     ?? 'default',
 
             'Host' => $this->systemName,
-            'Message' => $record['message'] ?? '',
-            'Channel' => $record['channel'] ?? '',
+            'Message' => $data['message'] ?? '',
+            'Channel' => $data['channel'] ?? '',
+            'Data' => []
         ];
 
-        if (isset($record['level_name'])) {
-            $message['Level'] = $record['level_name'];
+        if (isset($data['level_name'])) {
+            $message['Level'] = $data['level_name'];
         }
 
-        if (!empty($record['extra'])) {
-            foreach ($record['extra'] as $key => $val) {
+        if (!empty($data['extra'])) {
+            foreach ($data['extra'] as $key => $val) {
                 $message['Data'][$key] = $val;
             }
         }
-        if (!empty($record['context'])) {
-            foreach ($record['context'] as $key => $val) {
+        if (!empty($data['context'])) {
+            foreach ($data['context'] as $key => $val) {
                 $message['Data'][$key] = $val;
             }
         }
 
-        if (data_get($message, 'Data')) {
-            $json = json_encode($message['Data']);
-            data_set($message, 'Data', $json);
-        }
+        data_set($message, 'Data', $this->toJson($message['Data']));
 
         $message['tags'] = $message['tags'] ?? [];
 
@@ -71,7 +111,9 @@ class LogstashFormatter extends BaseLogstashFormatter
             $message['tags'][] = $this->applicationName;
         }
 
-        return $message;
+        $data['json'] = $this->toJson($message);
+
+        return $data;
     }
 
 }
